@@ -1,0 +1,6 @@
+token.txt
+*.tmp
+__pycache__/
+ios/*.xcodeproj
+ios/build/
+*.ipa

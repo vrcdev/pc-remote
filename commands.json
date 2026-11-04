@@ -1,0 +1,57 @@
+{
+  "bind": "100.102.47.11",
+  "port": 8765,
+  "deafen_hotkey": "ctrl+shift+f10",
+  "commands": {
+    "open overwatch": [
+      {
+        "type": "url",
+        "value": "battlenet://Pro"
+      }
+    ],
+    "close overwatch": [
+      {
+        "type": "kill",
+        "value": "Overwatch.exe"
+      }
+    ],
+    "open discord": [
+      {
+        "type": "run",
+        "value": "%LOCALAPPDATA%\\Discord\\Update.exe",
+        "args": [
+          "--processStart",
+          "Discord.exe"
+        ]
+      }
+    ],
+    "close discord": [
+      {
+        "type": "kill",
+        "value": "Discord.exe"
+      }
+    ],
+    "open librewolf": [
+      {
+        "type": "run",
+        "value": "C:\\Program Files\\LibreWolf\\librewolf.exe"
+      }
+    ],
+    "deafen": [
+      {
+        "type": "hotkey",
+        "value": "ctrl+shift+f10"
+      }
+    ],
+    "goonmode": [
+      {
+        "type": "hotkey",
+        "value": "ctrl+shift+f10"
+      },
+      {
+        "type": "run",
+        "value": "C:\\Program Files\\LibreWolf\\librewolf.exe"
+      }
+    ]
+  }
+}
