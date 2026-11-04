@@ -273,9 +273,9 @@ def pair_page(cfg):
         qr = "<p>Install the QR lib: <code>pip install qrcode</code>, or type the details in the app.</p>"
     page = f"""<!doctype html><meta charset=utf-8><title>Pair PC Remote</title>
 <body style="font-family:sans-serif;text-align:center;background:#111;color:#eee;padding:2rem">
-<h2>Scan with your iPhone Camera</h2><div style="background:#fff;display:inline-block;padding:16px;width:360px">{qr}</div>
+<h2>Scan with your iPhone Camera</h2><style>svg{{width:420px;height:420px;max-width:90vw;max-height:90vw;display:block}}</style><div style="background:#fff;display:inline-block;padding:24px">{qr}</div>
 <p>Opens PC Remote and fills in everything.<br>Host <b>{html.escape(host)}</b> · port <b>{cfg['port']}</b></p>
-<p style="opacity:.6">Contains your token — close this page when done.</p></body>"""
+<p style="opacity:.7;word-break:break-all;font-size:12px">Or open this link on the phone: {html.escape(link)}</p><p style="opacity:.6">Contains your token — close this page when done.</p></body>"""
     path = os.path.join(HERE, "pair.html")
     with open(path, "w", encoding="utf-8") as f:
         f.write(page)
