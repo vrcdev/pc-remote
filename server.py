@@ -13,7 +13,7 @@ Step types: url, run, kill, hotkey, shell, type, sleep, media, power
 import ctypes, hmac, json, os, subprocess, threading, time
 from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, parse_qs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CFG_PATH = os.path.join(HERE, "commands.json")
@@ -191,9 +191,11 @@ class H(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(n) or b"{}")
 
     def route(self, method):
-        if not hmac.compare_digest(self.headers.get("X-Token", ""), TOKEN):
+        u = urlparse(self.path)
+        given = self.headers.get("X-Token") or parse_qs(u.query).get("t", [""])[0]
+        if not hmac.compare_digest(given, TOKEN):
             return self.reply(401, {"error": "bad token"})
-        parts = urlparse(self.path).path.strip("/").split("/", 1)
+        parts = u.path.strip("/").split("/", 1)
         head = parts[0]
         name = unquote(parts[1]).strip() if len(parts) > 1 else ""
         try:
@@ -241,7 +243,8 @@ class H(BaseHTTPRequestHandler):
     def do_DELETE(self): self.route("DELETE")
 
     def log_message(self, fmt, *a):
-        print(self.address_string(), fmt % a)
+        import re
+        print(self.address_string(), re.sub(r"t=[^&\s]+", "t=***", fmt % a))
 
 
 def tailscale_ip(fallback):

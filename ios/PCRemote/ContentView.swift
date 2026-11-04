@@ -40,6 +40,14 @@ struct ContentView: View {
                     }
                     .contentShape(Rectangle())
                     .onTapGesture { editing = EditTarget(command: c, original: c.name) }
+                    .contextMenu {
+                        Button {
+                            if let u = API.shortcutURL(c.name) {
+                                UIPasteboard.general.string = u
+                                status = "Copied Siri URL for “\(c.name)” — paste it into a Shortcut"
+                            }
+                        } label: { Label("Copy Siri Shortcut URL", systemImage: "link") }
+                    }
                 }
                 .onDelete(perform: delete)
             }
@@ -249,6 +257,10 @@ struct SettingsView: View {
                 }
                 Section("Auto pair") {
                     Text("On your PC run pair.bat, then tap the scan button (top left of the main screen) and point it at the QR. It fills in the address and token for you.")
+                        .font(.footnote)
+                }
+                Section("Siri without App Intents") {
+                    Text("Long-press any command → Copy Siri Shortcut URL. In the Shortcuts app: + → “Get Contents of URL” → paste → name the shortcut what you want to say (e.g. “goonmode”). Then “Hey Siri, goonmode”.")
                         .font(.footnote)
                 }
                 Section("Siri") {

@@ -39,10 +39,19 @@ enum API {
         }
     }
 
-    private static func encodedName(_ name: String) -> String {
+    static func encodedName(_ name: String) -> String {
         var allowed = CharacterSet.urlPathAllowed
         allowed.remove("/")
         return name.addingPercentEncoding(withAllowedCharacters: allowed) ?? name
+    }
+
+    /// URL a Shortcuts "Get Contents of URL" action can call directly (token included).
+    static func shortcutURL(_ name: String) -> String? {
+        let d = UserDefaults.standard
+        let host = (d.string(forKey: "host") ?? "").trimmingCharacters(in: .whitespaces)
+        guard !host.isEmpty else { return nil }
+        let token = d.string(forKey: "token") ?? ""
+        return "http://\(host):\(d.string(forKey: "port") ?? "8765")/run/\(encodedName(name))?t=\(token)"
     }
 
     static func ping() async throws {
