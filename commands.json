@@ -1,5 +1,5 @@
 {
-  "bind": "100.102.47.11",
+  "bind": "auto",
   "port": 8765,
   "deafen_hotkey": "ctrl+shift+f10",
   "commands": {

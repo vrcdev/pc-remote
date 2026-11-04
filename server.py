@@ -95,7 +95,40 @@ def power(action):
         raise ValueError("power: lock | sleep | shutdown | restart")
 
 
-TYPES = {"url", "run", "kill", "hotkey", "shell", "type", "sleep", "media", "power"}
+TYPES = {"url", "run", "kill", "hotkey", "shell", "type", "sleep", "media", "power", "app"}
+
+_apps_cache = (0.0, [])
+
+
+def _ps_json(script):
+    """Run PowerShell, return parsed JSON (always a list)."""
+    full = "[Console]::OutputEncoding=[Text.Encoding]::UTF8;" + script
+    out = subprocess.run(["powershell", "-NoProfile", "-Command", full],
+                         capture_output=True, creationflags=0x08000000, timeout=40).stdout
+    txt = out.decode("utf-8", "replace").strip().lstrip("﻿")
+    if not txt:
+        return []
+    data = json.loads(txt)
+    return data if isinstance(data, list) else [data]
+
+
+def installed_apps():
+    global _apps_cache
+    if time.time() - _apps_cache[0] < 120:
+        return _apps_cache[1]
+    seen, apps = set(), []
+    for a in _ps_json("Get-StartApps | Sort-Object Name | ConvertTo-Json -Compress"):
+        if a["AppID"] not in seen:
+            seen.add(a["AppID"])
+            apps.append({"name": a["Name"], "id": a["AppID"]})
+    _apps_cache = (time.time(), apps)
+    return apps
+
+
+def running_apps():
+    names = _ps_json("Get-Process | Where-Object {$_.MainWindowHandle -ne 0} | "
+                     "Select-Object -ExpandProperty ProcessName -Unique | ConvertTo-Json -Compress")
+    return sorted({f"{n}.exe" for n in names}, key=str.lower)
 
 
 def do(step):
@@ -105,6 +138,11 @@ def do(step):
         os.startfile(ev)
     elif t == "run":
         subprocess.Popen([ev, *step.get("args", [])], close_fds=True)
+    elif t == "app":
+        if "://" in v:
+            os.startfile(v)  # some Start entries are really protocol links (steam://, https://)
+        else:
+            subprocess.Popen(["explorer.exe", "shell:AppsFolder\\" + v])
     elif t == "kill":
         subprocess.run(["taskkill", "/F", "/IM", ev], capture_output=True)
     elif t == "hotkey":
@@ -161,6 +199,10 @@ class H(BaseHTTPRequestHandler):
         try:
             if head == "ping":
                 return self.reply(200, {"ok": True, "host": os.environ.get("COMPUTERNAME", "pc")})
+            if head == "apps" and method == "GET":
+                return self.reply(200, {"apps": installed_apps()})
+            if head == "running" and method == "GET":
+                return self.reply(200, {"apps": [{"name": n, "id": n} for n in running_apps()]})
             if head == "commands":
                 if method == "GET" and not name:
                     return self.reply(200, {"commands": load()["commands"]})
@@ -202,8 +244,64 @@ class H(BaseHTTPRequestHandler):
         print(self.address_string(), fmt % a)
 
 
+def tailscale_ip(fallback):
+    """Auto-detect this PC's Tailscale IPv4; fall back to config value."""
+    for exe in ("tailscale", r"C:\Program Files\Tailscale\tailscale.exe"):
+        try:
+            out = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True,
+                                 timeout=10, creationflags=0x08000000).stdout.split()
+            if out:
+                return out[0]
+        except Exception:
+            pass
+    return fallback
+
+
+def pair_page(cfg):
+    """Write pair.html with a QR that opens PC Remote and fills in host/port/token."""
+    import html, webbrowser
+    host = tailscale_ip(cfg.get("bind", ""))
+    link = f"pcremote://pair?host={host}&port={cfg['port']}&token={TOKEN}"
+    try:
+        import qrcode, qrcode.image.svg
+        import io
+        buf = io.BytesIO()
+        qrcode.make(link, image_factory=qrcode.image.svg.SvgPathImage, box_size=12).save(buf)
+        qr = buf.getvalue().decode()
+        qr = qr[qr.index("<svg"):]
+    except Exception:
+        qr = "<p>Install the QR lib: <code>pip install qrcode</code>, or type the details in the app.</p>"
+    page = f"""<!doctype html><meta charset=utf-8><title>Pair PC Remote</title>
+<body style="font-family:sans-serif;text-align:center;background:#111;color:#eee;padding:2rem">
+<h2>Scan with your iPhone Camera</h2><div style="background:#fff;display:inline-block;padding:16px;width:360px">{qr}</div>
+<p>Opens PC Remote and fills in everything.<br>Host <b>{html.escape(host)}</b> · port <b>{cfg['port']}</b></p>
+<p style="opacity:.6">Contains your token — close this page when done.</p></body>"""
+    path = os.path.join(HERE, "pair.html")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(page)
+    webbrowser.open("file:///" + path.replace("\\", "/"))
+    print("Pairing page opened:", path)
+
+
 if __name__ == "__main__":
+    import sys
     cfg = load()
-    srv = ThreadingHTTPServer((cfg["bind"], cfg["port"]), H)
-    print(f"listening on {cfg['bind']}:{cfg['port']}")
+    if "--pair" in sys.argv:
+        pair_page(cfg)
+        sys.exit(0)
+    bind = cfg.get("bind", "auto")
+    srv = None
+    for attempt in range(60):  # wait for Tailscale if it isn't up yet (e.g. at boot)
+        host = tailscale_ip(None) if bind == "auto" else bind
+        try:
+            if host:
+                srv = ThreadingHTTPServer((host, cfg["port"]), H)
+                break
+        except OSError as e:
+            print("bind failed:", e)
+        print("waiting for Tailscale…")
+        time.sleep(5)
+    if not srv:
+        raise SystemExit("Could not bind: is Tailscale running?")
+    print(f"listening on {host}:{cfg['port']}  (run pair.bat to link your phone)")
     srv.serve_forever()

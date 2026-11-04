@@ -59,6 +59,16 @@ enum API {
         return cmds
     }
 
+    private struct AppsResp: Decodable { let apps: [InstalledApp] }
+
+    static func installedApps() async throws -> [InstalledApp] {
+        try JSONDecoder().decode(AppsResp.self, from: try await request("/apps")).apps
+    }
+
+    static func runningApps() async throws -> [InstalledApp] {
+        try JSONDecoder().decode(AppsResp.self, from: try await request("/running")).apps
+    }
+
     static func cachedNames() -> [String] {
         UserDefaults.standard.stringArray(forKey: cacheKey) ?? []
     }

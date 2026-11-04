@@ -6,6 +6,8 @@ struct ContentView: View {
     @State private var status = ""
     @State private var editing: EditTarget?
     @State private var showSettings = false
+    @State private var showAppPicker = false
+    @State private var showPresets = false
 
     struct EditTarget: Identifiable {
         let id = UUID()
@@ -40,9 +42,50 @@ struct ContentView: View {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        editing = EditTarget(command: Command(name: "", steps: [Step(type: .url, value: "")]), original: nil)
+                    Menu {
+                        Button {
+                            showAppPicker = true
+                        } label: { Label("Open an app…", systemImage: "app.badge") }
+                        Button {
+                            showPresets = true
+                        } label: { Label("Presets", systemImage: "sparkles") }
+                        Button {
+                            editing = EditTarget(command: Command(name: "", steps: [Step(type: .app, value: "")]), original: nil)
+                        } label: { Label("Custom command", systemImage: "slider.horizontal.3") }
                     } label: { Image(systemName: "plus") }
+                }
+            }
+            .sheet(isPresented: $showAppPicker) {
+                NavigationStack {
+                    AppPickerView(mode: .installed) { app in
+                        let cmd = Command(
+                            name: "open \(app.name.lowercased())",
+                            steps: [Step(type: .app, value: app.id, args: [app.name])]
+                        )
+                        // Present the editor after the picker sheet has closed.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            editing = EditTarget(command: cmd, original: nil)
+                        }
+                    }
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showAppPicker = false } }
+                    }
+                }
+            }
+            .sheet(isPresented: $showPresets) {
+                PresetsView(existing: Set(commands.map(\.name))) { await reload() }
+            }
+            .onOpenURL { url in
+                guard url.scheme == "pcremote", url.host == "pair",
+                      let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return }
+                func v(_ k: String) -> String? { q.first { $0.name == k }?.value }
+                guard let host = v("host"), let token = v("token") else { return }
+                UserDefaults.standard.set(host, forKey: "host")
+                UserDefaults.standard.set(v("port") ?? "8765", forKey: "port")
+                UserDefaults.standard.set(token, forKey: "token")
+                Task {
+                    await reload()
+                    if status.isEmpty { status = "Paired with \(host) ✓" }
                 }
             }
             .refreshable { await reload() }
@@ -104,14 +147,34 @@ struct EditorView: View {
                             Picker("Type", selection: $s.type) {
                                 ForEach(StepType.allCases) { Text($0.label).tag($0) }
                             }
-                            TextField(s.type.hint, text: $s.value)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
+                            switch s.type {
+                            case .app:
+                                NavigationLink {
+                                    AppPickerView(mode: .installed) { app in
+                                        s.value = app.id
+                                        s.args = [app.name]
+                                    }
+                                } label: {
+                                    Text(s.value.isEmpty ? "Choose app…" : (s.args?.first ?? s.value))
+                                        .foregroundStyle(s.value.isEmpty ? .secondary : .primary)
+                                }
+                            case .kill:
+                                TextField(s.type.hint, text: $s.value)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                NavigationLink("Pick a running app") {
+                                    AppPickerView(mode: .running) { app in s.value = app.id }
+                                }
+                            default:
+                                TextField(s.type.hint, text: $s.value)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                            }
                         }
                     }
                     .onDelete { command.steps.remove(atOffsets: $0) }
                     .onMove { command.steps.move(fromOffsets: $0, toOffset: $1) }
-                    Button("Add step") { command.steps.append(Step(type: .url, value: "")) }
+                    Button("Add step") { command.steps.append(Step(type: .app, value: "")) }
                 }
                 if !error.isEmpty { Text(error).foregroundStyle(.red) }
             }
@@ -166,6 +229,10 @@ struct SettingsView: View {
                         }
                     }
                     if !result.isEmpty { Text(result) }
+                }
+                Section("Auto pair") {
+                    Text("On your PC run pair.bat, then scan the QR with the iPhone Camera app. It opens this app and fills in the address and token for you.")
+                        .font(.footnote)
                 }
                 Section("Siri") {
                     Text("Say “Hey Siri, PC Remote <command>” or “Run <command> with PC Remote”. For a phrase without the app name, make a Shortcut named e.g. “open overwatch” containing the “Run PC Command” action.")

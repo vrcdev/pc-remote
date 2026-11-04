@@ -16,6 +16,9 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         NSLocalNetworkUsageDescription: Talks to the command server on your PC.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.titan.pcremote
+            CFBundleURLSchemes: [pcremote]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.titan.pcremote
