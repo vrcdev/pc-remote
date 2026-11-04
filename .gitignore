@@ -3,4 +3,3 @@ token.txt
 __pycache__/
 ios/*.xcodeproj
 ios/build/
-*.ipa
