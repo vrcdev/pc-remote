@@ -16,6 +16,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         NSLocalNetworkUsageDescription: Talks to the command server on your PC.
+        NSCameraUsageDescription: Scan the pairing QR code shown on your PC.
         CFBundleURLTypes:
           - CFBundleURLName: com.titan.pcremote
             CFBundleURLSchemes: [pcremote]

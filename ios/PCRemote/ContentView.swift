@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var status = ""
     @State private var editing: EditTarget?
     @State private var showSettings = false
+    @State private var showScanner = false
     @State private var showAppPicker = false
     @State private var showPresets = false
 
@@ -20,6 +21,12 @@ struct ContentView: View {
             List {
                 if !status.isEmpty {
                     Text(status).font(.footnote).foregroundStyle(.secondary)
+                }
+                if (UserDefaults.standard.string(forKey: "host") ?? "").isEmpty {
+                    Button { showScanner = true } label: {
+                        Label("Scan QR to pair with your PC", systemImage: "qrcode.viewfinder")
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
                 ForEach(commands) { c in
                     HStack {
@@ -38,8 +45,9 @@ struct ContentView: View {
             }
             .navigationTitle("PC Remote")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItemGroup(placement: .topBarLeading) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                    Button { showScanner = true } label: { Image(systemName: "qrcode.viewfinder") }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -75,17 +83,10 @@ struct ContentView: View {
             .sheet(isPresented: $showPresets) {
                 PresetsView(existing: Set(commands.map(\.name))) { await reload() }
             }
-            .onOpenURL { url in
-                guard url.scheme == "pcremote", url.host == "pair",
-                      let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return }
-                func v(_ k: String) -> String? { q.first { $0.name == k }?.value }
-                guard let host = v("host"), let token = v("token") else { return }
-                UserDefaults.standard.set(host, forKey: "host")
-                UserDefaults.standard.set(v("port") ?? "8765", forKey: "port")
-                UserDefaults.standard.set(token, forKey: "token")
-                Task {
-                    await reload()
-                    if status.isEmpty { status = "Paired with \(host) ✓" }
+            .onOpenURL { url in _ = pair(url.absoluteString) }
+            .sheet(isPresented: $showScanner) {
+                ScanSheet { code in
+                    pair(code) ? nil : "That's not a PC Remote QR code."
                 }
             }
             .refreshable { await reload() }
@@ -95,6 +96,22 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
         }
+    }
+
+    /// Parses a pcremote://pair?host=…&port=…&token=… link, saves it, and reloads.
+    func pair(_ text: String) -> Bool {
+        guard let url = URL(string: text), url.scheme == "pcremote", url.host == "pair",
+              let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return false }
+        func v(_ k: String) -> String? { q.first { $0.name == k }?.value }
+        guard let host = v("host"), let token = v("token") else { return false }
+        UserDefaults.standard.set(host, forKey: "host")
+        UserDefaults.standard.set(v("port") ?? "8765", forKey: "port")
+        UserDefaults.standard.set(token, forKey: "token")
+        Task {
+            await reload()
+            if status.isEmpty { status = "Paired with \(host) ✓" }
+        }
+        return true
     }
 
     func reload() async {
@@ -231,7 +248,7 @@ struct SettingsView: View {
                     if !result.isEmpty { Text(result) }
                 }
                 Section("Auto pair") {
-                    Text("On your PC run pair.bat, then scan the QR with the iPhone Camera app. It opens this app and fills in the address and token for you.")
+                    Text("On your PC run pair.bat, then tap the scan button (top left of the main screen) and point it at the QR. It fills in the address and token for you.")
                         .font(.footnote)
                 }
                 Section("Siri") {
